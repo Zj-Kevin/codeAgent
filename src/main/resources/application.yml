@@ -15,7 +15,7 @@ mewcode:
     protocol: deepseek
     model: deepseek-v4-pro
     base-url: https://api.deepseek.com
-    api-key: sk-4278689564b54b6289ca4aab7843aac8
+    api-key: ${DEEPSEEK_API_KEY}
   agent:
     max-rounds: 25
     include-tools: true

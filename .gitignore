@@ -1,2 +1,23 @@
-# 项目排除路径
-/target/
+# Build
+target/
+*.class
+*.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config with secrets — keep local
+mewcode.yaml
+application-local.yml
+
+# Logs
+*.log
