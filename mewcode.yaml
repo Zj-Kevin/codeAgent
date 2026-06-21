@@ -1,0 +1,18 @@
+# MewCode configuration
+# This file can be placed in:
+#   1. Current directory: ./mewcode.yaml  (takes precedence)
+#   2. User home: ~/.mewcode/config.yaml
+
+provider:
+  # Which API protocol: anthropic | openai | deepseek
+  protocol: deepseek
+
+  # Model name
+  model: deepseek-v4-pro
+
+  # API base URL (leave default based on protocol if blank)
+  base_url: https://api.deepseek.com
+
+  # API key — leave blank to read from environment variable:
+  #   ANTHROPIC_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY
+  api_key: sk-4278689564b54b6289ca4aab7843aac8

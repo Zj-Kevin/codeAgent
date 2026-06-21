@@ -1,0 +1,25 @@
+spring:
+  main:
+    web-application-type: none
+    banner-mode: off
+  threads:
+    virtual:
+      enabled: true
+
+logging:
+  level:
+    root: ERROR
+
+mewcode:
+  provider:
+    protocol: deepseek
+    model: deepseek-v4-pro
+    base-url: https://api.deepseek.com
+    api-key: sk-4278689564b54b6289ca4aab7843aac8
+  agent:
+    max-rounds: 25
+    include-tools: true
+  http:
+    timeout-seconds: 120
+  history:
+    dir: ~/.mewcode/history
