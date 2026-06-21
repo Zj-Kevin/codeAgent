@@ -5,6 +5,7 @@ import com.mewcode.config.MewCodeProperties;
 import com.mewcode.conversation.ConversationManager;
 import com.mewcode.conversation.HistoryStore;
 import com.mewcode.provider.LLMProvider;
+import com.mewcode.security.SecurityManager;
 import com.mewcode.tool.ToolRegistry;
 import com.mewcode.tui.MewCodeCli;
 import org.springframework.beans.factory.ObjectProvider;
@@ -26,16 +27,19 @@ public class MewCodeCliRunner implements CommandLineRunner {
     private final ToolRegistry toolRegistry;
     private final MewCodeProperties props;
     private final ObjectProvider<AgentLoop> agentLoopProvider;
+    private final SecurityManager securityManager;
 
     public MewCodeCliRunner(LLMProvider provider, ConversationManager conversationManager,
                             HistoryStore historyStore, ToolRegistry toolRegistry,
-                            MewCodeProperties props, ObjectProvider<AgentLoop> agentLoopProvider) {
+                            MewCodeProperties props, ObjectProvider<AgentLoop> agentLoopProvider,
+                            SecurityManager securityManager) {
         this.provider = provider;
         this.conversationManager = conversationManager;
         this.historyStore = historyStore;
         this.toolRegistry = toolRegistry;
         this.props = props;
         this.agentLoopProvider = agentLoopProvider;
+        this.securityManager = securityManager;
     }
 
     @Override
@@ -78,7 +82,7 @@ public class MewCodeCliRunner implements CommandLineRunner {
 
         var cli = new MewCodeCli(provider, conversationManager, historyStore,
             props.getProvider().getModel(), toolRegistry, agentLoopProvider,
-            props.getAgent(), planOnly);
+            props.getAgent(), planOnly, securityManager);
 
         Runtime.getRuntime().addShutdownHook(Thread.ofVirtual().unstarted(() -> {
             cli.stop();

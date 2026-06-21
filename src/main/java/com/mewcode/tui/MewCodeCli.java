@@ -6,6 +6,8 @@ import com.mewcode.config.MewCodeProperties;
 import com.mewcode.conversation.ConversationManager;
 import com.mewcode.conversation.HistoryStore;
 import com.mewcode.provider.LLMProvider;
+import com.mewcode.security.SecurityManager;
+import com.mewcode.security.SecurityRule;
 import com.mewcode.tool.ToolRegistry;
 import com.mewcode.tool.ToolResult;
 import org.jline.reader.*;
@@ -42,6 +44,7 @@ public class MewCodeCli {
     private final ToolRegistry toolRegistry;
     private final ObjectProvider<AgentLoop> agentLoopProvider;
     private final MewCodeProperties.Agent agentConfig;
+    private final SecurityManager securityManager;
     private boolean planOnly;
 
     private volatile boolean running = true;
@@ -56,7 +59,8 @@ public class MewCodeCli {
     public MewCodeCli(LLMProvider provider, ConversationManager conversationManager,
                       HistoryStore historyStore, String modelName, ToolRegistry toolRegistry,
                       ObjectProvider<AgentLoop> agentLoopProvider,
-                      MewCodeProperties.Agent agentConfig, boolean planOnly) {
+                      MewCodeProperties.Agent agentConfig, boolean planOnly,
+                      SecurityManager securityManager) {
         this.provider = provider;
         this.conversationManager = conversationManager;
         this.historyStore = historyStore;
@@ -65,6 +69,7 @@ public class MewCodeCli {
         this.agentLoopProvider = agentLoopProvider;
         this.agentConfig = agentConfig;
         this.planOnly = planOnly;
+        this.securityManager = securityManager;
     }
 
     // ═══════════════════════════════════════════════════════
@@ -234,6 +239,27 @@ public class MewCodeCli {
             }
 
             @Override
+            public AgentEventListener.AskDecision onToolAsk(String tool, String value) {
+                out.println();
+                out.println(YLW + "  ⚙ " + tool + ": " + truncate(value, 60) + RST);
+                out.print(YLW + "  ⏵ Allow? [a=once / s=session / p=permanent / d=deny] " + RST);
+                out.flush();
+                try {
+                    String answer = reader.readLine("");
+                    if (answer == null) return AgentEventListener.AskDecision.DENY;
+                    return switch (answer.strip().toLowerCase()) {
+                        case "a" -> AgentEventListener.AskDecision.ALLOW;
+                        case "s" -> { securityManager.addSessionRule(
+                            SecurityRule.allow(tool, "*", "session")); yield AgentEventListener.AskDecision.ALLOW; }
+                        case "p" -> AgentEventListener.AskDecision.SAVE;
+                        case "d", "" -> AgentEventListener.AskDecision.DENY;
+                        default -> AgentEventListener.AskDecision.DENY;
+                    };
+                } catch (Exception e) {
+                    return AgentEventListener.AskDecision.DENY;
+                }
+            }
+
             public void onError(String message) {
                 out.println(RED + "  ✖ " + message + RST);
                 out.flush();
@@ -273,6 +299,8 @@ public class MewCodeCli {
                 out.println("  " + YLW + "/history" + RST + "     Message count");
                 out.println("  " + YLW + "/clear" + RST + "       Clear session");
                 out.println("  " + YLW + "/plan-only" + RST + "   Toggle plan-only mode");
+                out.println("  " + YLW + "/mode <m>" + RST + "    Set security mode (strict/default/permissive)");
+                out.println("  " + YLW + "/permissions" + RST + "  List security rules");
                 return true;
             }
             case "/history" -> { sep(); out.println(YLW + SYS_MARK + " 当前 " + conversationManager.size() + " 条消息" + RST); return true; }
@@ -281,6 +309,25 @@ public class MewCodeCli {
                 planOnly = !planOnly;
                 sep();
                 out.println(DIM + "  Plan-only: " + (planOnly ? "ON" : "OFF") + RST);
+                return true;
+            }
+            case "/mode" -> {
+                sep();
+                out.println(DIM + "  Mode: " + securityManager.getMode() + "  (strict / default / permissive)" + RST);
+                return true;
+            }
+            case "/mode strict", "/mode default", "/mode permissive" -> {
+                var mode = SecurityManager.Mode.valueOf(text.split(" ")[1].toUpperCase());
+                securityManager.setMode(mode);
+                sep();
+                out.println(DIM + "  Mode: " + mode + RST);
+                return true;
+            }
+            case "/permissions" -> {
+                sep();
+                var rules = securityManager.activeRules();
+                if (rules.isEmpty()) out.println(DIM + "  (no rules)" + RST);
+                else for (var r : rules) out.println(DIM + "  " + r.action() + " " + r.tool() + ": " + r.pattern() + "  [" + r.source() + "]" + RST);
                 return true;
             }
             default -> { return false; }

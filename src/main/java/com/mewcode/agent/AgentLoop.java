@@ -8,6 +8,7 @@ import com.mewcode.provider.LLMProvider;
 import com.mewcode.provider.Message;
 import com.mewcode.provider.StreamChunk;
 import com.mewcode.prompt.InjectionBuilder;
+import com.mewcode.security.SecurityManager;
 import com.mewcode.tool.ToolRegistry;
 import com.mewcode.tool.ToolResult;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
@@ -30,6 +31,7 @@ public class AgentLoop {
     private final MewCodeProperties.Agent agentConfig;
     private boolean planOnly;
     private final InjectionBuilder injectionBuilder;
+    private final SecurityManager securityManager;
     private final ObjectMapper json = new ObjectMapper();
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
 
@@ -41,7 +43,7 @@ public class AgentLoop {
      * @param planOnly       runtime flag (settable per invocation)
      */
     public AgentLoop(LLMProvider provider, ConversationManager conversationManager,
-                     InjectionBuilder injectionBuilder,
+                     InjectionBuilder injectionBuilder, SecurityManager securityManager,
                      ToolRegistry toolRegistry, MewCodeProperties props) {
         this.provider = provider;
         this.conversationManager = conversationManager;
@@ -49,6 +51,7 @@ public class AgentLoop {
         this.agentConfig = props.getAgent();
         this.planOnly = false;
         this.injectionBuilder = injectionBuilder;
+        this.securityManager = securityManager;
     }
 
     public void setPlanOnly(boolean planOnly) { this.planOnly = planOnly; }
@@ -145,12 +148,46 @@ public class AgentLoop {
     }
 
     private ToolResult executeOneToolSync(ToolCallAccumulator tc, AgentEventListener listener) {
+        // Security check
+        String value = extractValue(tc);
+        var decision = securityManager.check(tc.name, value);
+        if (decision == com.mewcode.security.SecurityRule.Action.DENY) {
+            ToolResult denied = ToolResult.fail("Security denied: " + securityManager.lastReason());
+            tc.result = denied;
+            listener.onToolResult(tc.id, tc.name, denied);
+            return denied;
+        }
+        if (decision == com.mewcode.security.SecurityRule.Action.ASK) {
+            var answer = listener.onToolAsk(tc.name, value);
+            if (answer == AgentEventListener.AskDecision.DENY) {
+                ToolResult denied = ToolResult.fail("User denied the operation");
+                tc.result = denied;
+                listener.onToolResult(tc.id, tc.name, denied);
+                return denied;
+            }
+            // ALLOW or SAVE — proceed
+            if (answer == AgentEventListener.AskDecision.SAVE) {
+                try {
+                    String tier = "project"; // save to project by default
+                    securityManager.savePermanent(
+                        com.mewcode.security.SecurityRule.allow(tc.name, "*", tier), tier);
+                } catch (Exception ignored) {}
+            }
+        }
+
         var tool = toolRegistry.get(tc.name);
         ToolResult result = tool != null ? tool.execute(tc.args != null ? tc.args : Map.of())
             : ToolResult.fail("Unknown tool: " + tc.name);
         tc.result = result;
         listener.onToolResult(tc.id, tc.name, result);
         return result;
+    }
+
+    /** Extract the security-relevant value from tool args. */
+    private String extractValue(ToolCallAccumulator tc) {
+        if (tc.args == null || tc.args.isEmpty()) return "";
+        if ("bash".equals(tc.name)) return (String) tc.args.getOrDefault("command", "");
+        return (String) tc.args.getOrDefault("path", "");
     }
 
     private void executeOneTool(ToolCallAccumulator tc, AgentEventListener listener) {
