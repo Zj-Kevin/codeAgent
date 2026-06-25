@@ -35,6 +35,8 @@ public class AgentLoop {
     private final ObjectMapper json = new ObjectMapper();
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
 
+    private int maxRounds;
+
     /**
      * @param provider       injected LLM provider
      * @param conversationManager injected conversation state
@@ -49,6 +51,7 @@ public class AgentLoop {
         this.conversationManager = conversationManager;
         this.toolRegistry = toolRegistry;
         this.agentConfig = props.getAgent();
+        this.maxRounds = agentConfig.getMaxRounds();
         this.planOnly = false;
         this.injectionBuilder = injectionBuilder;
         this.securityManager = securityManager;
@@ -64,9 +67,10 @@ public class AgentLoop {
         conversationManager.addUserMessage(userMessage);
 
         boolean useOpenAIFormat = provider.toolFormat() == LLMProvider.ToolFormat.OPENAI;
-        List<Map<String, Object>> tools = buildToolList(useOpenAIFormat);
 
-        for (int round = 0; round < agentConfig.getMaxRounds(); round++) {
+        for (int round = 0; round < maxRounds; round++) {
+            // Refresh tool list each round — MCP tools may have been added/removed
+            List<Map<String, Object>> tools = buildToolList(useOpenAIFormat);
             if (cancelled.get()) { listener.onError("Cancelled by user"); return; }
 
             var fullHistory = new ArrayList<>(conversationManager.getHistoryForRequest());
@@ -130,7 +134,7 @@ public class AgentLoop {
             listener.onRoundEnd(round);
         }
 
-        listener.onError("Max rounds (" + agentConfig.getMaxRounds() + ") reached");
+        listener.onError("Max rounds (" + maxRounds + ") reached");
     }
 
     private List<Map<String, Object>> buildToolList(boolean useOpenAIFormat) {
@@ -183,11 +187,22 @@ public class AgentLoop {
         return result;
     }
 
-    /** Extract the security-relevant value from tool args. */
+    /** Extract the security-relevant value from tool args.
+     * For MCP tools, concatenates all string values in the args map. */
     private String extractValue(ToolCallAccumulator tc) {
         if (tc.args == null || tc.args.isEmpty()) return "";
         if ("bash".equals(tc.name)) return (String) tc.args.getOrDefault("command", "");
-        return (String) tc.args.getOrDefault("path", "");
+        // For MCP tools (or any tool), extract path-like args
+        if (tc.args.containsKey("path")) return (String) tc.args.getOrDefault("path", "");
+        // Fallback for MCP tools: concatenate all string values
+        if (tc.name.startsWith("mcp__")) {
+            var sb = new StringBuilder();
+            for (var val : tc.args.values()) {
+                if (val instanceof String s && !s.isEmpty()) sb.append(s).append(" ");
+            }
+            return sb.toString().stripTrailing();
+        }
+        return "";
     }
 
     private void executeOneTool(ToolCallAccumulator tc, AgentEventListener listener) {

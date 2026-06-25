@@ -3,11 +3,11 @@ package com.mewcode.security;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Four-layer security review: mode override → blacklist → rule table → fallback to ASK.
+ * Five-layer security review: path sandbox → blacklist → mode override → rule table → fallback to ASK.
  */
 @Component
 public class SecurityManager {
@@ -27,6 +27,16 @@ public class SecurityManager {
     private final Path projectPermissionsFile;
     private final Path globalPermissionsFile;
 
+    // ── Tool categories (for SecurityManager to classify tools) ─
+    private final ConcurrentHashMap<String, Set<String>> toolCategories = new ConcurrentHashMap<>();
+
+    // Built-in tool categories
+    private static final Set<String> FILE_TOOLS = Set.of("read_file", "write_file", "edit_file", "glob", "grep");
+    private static final Set<String> CAT_FILE = Set.of("file");
+    private static final Set<String> CAT_FILE_AND_WRITE = Set.of("file", "write");
+    private static final Set<String> CAT_WRITE = Set.of("write");
+    private static final Set<String> CAT_READ_ONLY = Set.of("file", "read-only");
+
     public SecurityManager() {
         this(Path.of("").toAbsolutePath());
     }
@@ -38,6 +48,14 @@ public class SecurityManager {
             ".mewcode/permissions.json");
         this.projectRules = store.load(projectPermissionsFile);
         this.globalRules = store.load(globalPermissionsFile);
+
+        // Register built-in categories
+        toolCategories.put("read_file", CAT_READ_ONLY);
+        toolCategories.put("glob", CAT_READ_ONLY);
+        toolCategories.put("grep", CAT_READ_ONLY);
+        toolCategories.put("write_file", CAT_FILE_AND_WRITE);
+        toolCategories.put("edit_file", CAT_FILE_AND_WRITE);
+        toolCategories.put("bash", CAT_WRITE);
     }
 
     // ── Public API ──────────────────────────────────────────
@@ -110,6 +128,20 @@ public class SecurityManager {
     public Mode getMode() { return mode; }
     public void setMode(Mode mode) { this.mode = mode; }
 
+    // ── Tool category management ────────────────────────────
+
+    /** Register categories for a tool (e.g. from MCP annotations). */
+    public void registerToolCategories(String toolName, Set<String> cats) {
+        if (cats != null && !cats.isEmpty()) {
+            toolCategories.put(toolName, cats);
+        }
+    }
+
+    /** Remove tool category mapping. */
+    public void unregisterTool(String toolName) {
+        toolCategories.remove(toolName);
+    }
+
     // ── Internals ───────────────────────────────────────────
 
     private SecurityRule.Action matchRule(String tool, String value) {
@@ -119,12 +151,13 @@ public class SecurityManager {
         return null; // no match
     }
 
-    private static boolean isFileTool(String tool) {
-        return "read_file".equals(tool) || "write_file".equals(tool)
-            || "edit_file".equals(tool) || "glob".equals(tool);
+    private boolean isFileTool(String tool) {
+        Set<String> cats = toolCategories.get(tool);
+        return cats != null && cats.contains("file");
     }
 
-    private static boolean isWriteTool(String tool) {
-        return "write_file".equals(tool) || "edit_file".equals(tool) || "bash".equals(tool);
+    private boolean isWriteTool(String tool) {
+        Set<String> cats = toolCategories.get(tool);
+        return cats != null && cats.contains("write");
     }
 }

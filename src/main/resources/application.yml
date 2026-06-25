@@ -23,3 +23,5 @@ mewcode:
     timeout-seconds: 120
   history:
     dir: ~/.mewcode/history
+  mcp:
+    enabled: true

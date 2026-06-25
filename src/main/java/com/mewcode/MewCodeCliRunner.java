@@ -10,6 +10,7 @@ import com.mewcode.tool.ToolRegistry;
 import com.mewcode.tui.MewCodeCli;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -19,6 +20,7 @@ import java.nio.file.Path;
  * Spring Boot entry point — wires injected beans into MewCodeCli and starts the terminal loop.
  */
 @Component
+@Profile("!test")
 public class MewCodeCliRunner implements CommandLineRunner {
 
     private final LLMProvider provider;

@@ -23,10 +23,14 @@ public class MewCodeProperties {
     @NestedConfigurationProperty
     private final History history = new History();
 
+    @NestedConfigurationProperty
+    private final Mcp mcp = new Mcp();
+
     public Provider getProvider() { return provider; }
     public Agent getAgent() { return agent; }
     public Http getHttp() { return http; }
     public History getHistory() { return history; }
+    public Mcp getMcp() { return mcp; }
 
     // ── Nested classes ─────────────────────────────────────
 
@@ -104,5 +108,13 @@ public class MewCodeProperties {
 
         public String getDir() { return dir; }
         public void setDir(String dir) { this.dir = dir; }
+    }
+
+    public static class Mcp {
+        /** Master switch to disable all MCP functionality. */
+        private boolean enabled = true;
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
     }
 }

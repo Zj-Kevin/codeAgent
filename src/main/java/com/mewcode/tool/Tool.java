@@ -22,4 +22,10 @@ public interface Tool {
 
     /** Execute the tool with resolved arguments. Must not throw — return ToolResult.fail() on error. */
     ToolResult execute(Map<String, Object> params);
+
+    /** Where this tool came from. Default {@code "builtin"}. */
+    default String source() { return "builtin"; }
+
+    /** Categories for SecurityManager classification. e.g. {@code "write"}, {@code "file"}, {@code "read-only"}. */
+    default java.util.Set<String> categories() { return java.util.Set.of(); }
 }
